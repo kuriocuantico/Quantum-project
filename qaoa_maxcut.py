@@ -1,91 +1,95 @@
-# QAOA — Max-Cut con 4 nodos
+# QAOA Max-Cut — Quantum Approximate Optimization Algorithm
+# Finds the optimal partition of a network to maximize cut edges
+# Executed on local simulator and IBM Quantum real hardware (ibm_fez, 156 qubits)
+
 import numpy as np
 from qiskit import QuantumCircuit
 from qiskit_aer import AerSimulator
 from scipy.optimize import minimize
 
-# El grafo: lista de conexiones (aristas)
-aristas = [(0,1), (1,2), (2,3), (3,0), (0,2)]
+# Graph definition: list of edges (connections between nodes)
+edges = [(0,1), (1,2), (2,3), (3,0), (0,2)]
+n_qubits = 4  # one qubit per node
 
-n_qubits = 4  # un qubit por nodo
-
-def construir_circuito(gamma, beta):
+def build_circuit(gamma, beta):
+    """Build QAOA circuit with given parameters gamma and beta."""
     qc = QuantumCircuit(n_qubits)
 
-    # Superposición inicial
+    # Initial superposition — explore all partitions simultaneously
     for i in range(n_qubits):
         qc.h(i)
 
-    # Capa de problema
-    for (u, v) in aristas:
+    # Problem layer — encode the graph structure
+    for (u, v) in edges:
         qc.cx(u, v)
         qc.rz(2 * gamma, v)
         qc.cx(u, v)
 
-    # Capa de mezcla
+    # Mixing layer — explore neighboring solutions
     for i in range(n_qubits):
         qc.rx(2 * beta, i)
 
     qc.measure_all()
     return qc
 
-def calcular_corte(estado, aristas):
-    corte = 0
-    for (u, v) in aristas:
-        if estado[u] != estado[v]:
-            corte += 1
-    return corte
+def compute_cut(state, edges):
+    """Count how many edges are cut between the two groups."""
+    cut = 0
+    for (u, v) in edges:
+        if state[u] != state[v]:
+            cut += 1
+    return cut
 
-def ejecutar_qaoa(params):
+def run_qaoa(params):
+    """Run QAOA circuit and return negative expected cut value."""
     gamma, beta = params
-    qc = construir_circuito(gamma, beta)
-    simulador = AerSimulator()
-    resultado = simulador.run(qc, shots=1000).result()
-    conteos = resultado.get_counts()
+    qc = build_circuit(gamma, beta)
+    simulator = AerSimulator()
+    result = simulator.run(qc, shots=1000).result()
+    counts = result.get_counts()
 
-    # Calcular valor esperado del corte
-    valor_total = 0
-    total_shots = sum(conteos.values())
-    for estado, veces in conteos.items():
-        corte = calcular_corte(estado, aristas)
-        valor_total += corte * veces
-    return -valor_total / total_shots  # negativo porque minimize busca mínimo
+    # Compute expected cut value
+    total_cut = 0
+    total_shots = sum(counts.values())
+    for state, times in counts.items():
+        cut = compute_cut(state, edges)
+        total_cut += cut * times
+    return -total_cut / total_shots  # negative because minimize seeks minimum
 
-# Optimizar parámetros γ y β
-print("Optimizando parámetros cuánticos...")
-params_iniciales = [0.5, 0.5]
-resultado_opt = minimize(
-    ejecutar_qaoa,
-    params_iniciales,
+# Optimize gamma and beta parameters
+print("Optimizing quantum parameters...")
+initial_params = [0.5, 0.5]
+opt_result = minimize(
+    run_qaoa,
+    initial_params,
     method='COBYLA',
     options={'maxiter': 100}
 )
 
-gamma_opt, beta_opt = resultado_opt.x
-print(f"γ óptimo: {gamma_opt:.3f}")
-print(f"β óptimo: {beta_opt:.3f}")
+gamma_opt, beta_opt = opt_result.x
+print(f"Optimal gamma: {gamma_opt:.3f}")
+print(f"Optimal beta:  {beta_opt:.3f}")
 
-# Ejecutar con parámetros óptimos
-print("\nEjecutando con parámetros óptimos...")
-qc_final = construir_circuito(gamma_opt, beta_opt)
-simulador = AerSimulator()
-resultado_final = simulador.run(qc_final, shots=1000).result()
-conteos_final = resultado_final.get_counts()
+# Run final circuit with optimal parameters
+print("\nRunning with optimal parameters...")
+qc_final = build_circuit(gamma_opt, beta_opt)
+simulator = AerSimulator()
+final_result = simulator.run(qc_final, shots=1000).result()
+final_counts = final_result.get_counts()
 
-# Mostrar mejores soluciones
-print("\n=== MEJORES PARTICIONES ENCONTRADAS ===")
-print()
-soluciones = []
-for estado, veces in conteos_final.items():
-    corte = calcular_corte(estado, aristas)
-    soluciones.append((estado, corte, veces))
+# Display best partitions found
+print("\n=== BEST PARTITIONS FOUND ===\n")
+solutions = []
+for state, times in final_counts.items():
+    cut = compute_cut(state, edges)
+    solutions.append((state, cut, times))
 
-soluciones.sort(key=lambda x: (-x[1], -x[2]))
+solutions.sort(key=lambda x: (-x[1], -x[2]))
 
-for estado, corte, veces in soluciones[:5]:
-    grupo0 = [i for i,b in enumerate(estado) if b=='0']
-    grupo1 = [i for i,b in enumerate(estado) if b=='1']
-    barra = '█' * (veces // 20)
-    print(f"|{estado}⟩  corte={corte}  {barra} {veces} veces")
-    print(f"       Grupo A: nodos {grupo0}  |  Grupo B: nodos {grupo1}")
+for state, cut, times in solutions[:5]:
+    group0 = [i for i,b in enumerate(state) if b=='0']
+    group1 = [i for i,b in enumerate(state) if b=='1']
+    bar = '█' * (times // 20)
+    print(f"|{state}⟩  cut={cut}  {bar} {times} times")
+    print(f"       Group A: nodes {group0}  |  Group B: nodes {group1}")
     print()

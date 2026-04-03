@@ -1,99 +1,100 @@
-# Grover con 3 qubits — búsqueda cuántica en 8 estados
+# Grover's Algorithm — 3 qubits (8 possible states)
+# Quantum search algorithm with reusable oracle
+# Finds any target state with ~94% accuracy in 2 iterations
+# vs 4 average attempts with classical search
+
 from qiskit import QuantumCircuit
 from qiskit_aer import AerSimulator
 
-def oracle(circuito, estado_objetivo):
+def oracle(circuit, target_state):
     """
-    Oráculo de Grover — marca el estado objetivo con fase negativa.
-    estado_objetivo: string de 3 bits, ejemplo '101'
+    Grover oracle — marks target state with negative phase.
+    target_state: 3-bit string, e.g. '101'
+    Note: Qiskit reads qubits in reverse order.
     """
-    # Qiskit lee al revés — invertimos el string
-    estado = estado_objetivo[::-1]
-    
-    # X en qubits que deben ser 0
-    for i, bit in enumerate(estado):
+    state = target_state[::-1]  # reverse for Qiskit ordering
+
+    # Apply X to qubits that must be 0
+    for i, bit in enumerate(state):
         if bit == '0':
-            circuito.x(i)
-    
-    # CCZ — marca el estado |111⟩
-    circuito.ccz(0, 1, 2)
-    
-    # Deshacer X
-    for i, bit in enumerate(estado):
+            circuit.x(i)
+
+    # CCZ — marks |111⟩ with negative phase
+    circuit.ccz(0, 1, 2)
+
+    # Undo X gates
+    for i, bit in enumerate(state):
         if bit == '0':
-            circuito.x(i)
+            circuit.x(i)
 
-def difusion(circuito):
+def diffusion(circuit):
     """
-    Difusión de Grover — amplifica el estado marcado.
-    Igual para cualquier estado objetivo.
+    Grover diffusion operator — amplifies the marked state.
+    Same for any target state — never changes.
     """
-    circuito.h(0)
-    circuito.h(1)
-    circuito.h(2)
-    circuito.x(0)
-    circuito.x(1)
-    circuito.x(2)
-    circuito.ccz(0, 1, 2)
-    circuito.x(0)
-    circuito.x(1)
-    circuito.x(2)
-    circuito.h(0)
-    circuito.h(1)
-    circuito.h(2)
+    circuit.h(0)
+    circuit.h(1)
+    circuit.h(2)
+    circuit.x(0)
+    circuit.x(1)
+    circuit.x(2)
+    circuit.ccz(0, 1, 2)
+    circuit.x(0)
+    circuit.x(1)
+    circuit.x(2)
+    circuit.h(0)
+    circuit.h(1)
+    circuit.h(2)
 
-def grover(estado_objetivo, shots=1000):
+def grover_search(target_state, shots=1000):
     """
-    Algoritmo de Grover completo para 3 qubits.
-    Busca estado_objetivo entre 8 posibles estados.
+    Full Grover's algorithm for 3 qubits.
+    Searches for target_state among 8 possible states.
+    Optimal iterations: floor(pi/4 * sqrt(8)) = 2
     """
-    print(f"Buscando |{estado_objetivo}⟩ entre 8 estados...")
+    print(f"Searching for |{target_state}⟩ among 8 states...")
     print()
 
-    # Crear circuito
-    circuito = QuantumCircuit(3, 3)
+    circuit = QuantumCircuit(3, 3)
 
-    # Superposición inicial
-    circuito.h(0)
-    circuito.h(1)
-    circuito.h(2)
-    circuito.barrier()
+    # Initial superposition — all 8 states at once
+    circuit.h(0)
+    circuit.h(1)
+    circuit.h(2)
+    circuit.barrier()
 
-    # 2 iteraciones — óptimo para N=8
-    for i in range(2):
-        oracle(circuito, estado_objetivo)
-        circuito.barrier()
-        difusion(circuito)
-        circuito.barrier()
+    # 2 iterations — optimal for N=8
+    for _ in range(2):
+        oracle(circuit, target_state)
+        circuit.barrier()
+        diffusion(circuit)
+        circuit.barrier()
 
-    # Medición
-    circuito.measure(0, 0)
-    circuito.measure(1, 1)
-    circuito.measure(2, 2)
+    # Measurement
+    circuit.measure(0, 0)
+    circuit.measure(1, 1)
+    circuit.measure(2, 2)
 
-    # Ejecutar
-    simulador = AerSimulator()
-    resultado = simulador.run(circuito, shots=shots).result()
-    conteos = resultado.get_counts()
+    # Run simulation
+    simulator = AerSimulator()
+    result = simulator.run(circuit, shots=shots).result()
+    counts = result.get_counts()
 
-    # Mostrar resultados
-    print("=== RESULTADOS ===")
-    print()
-    for estado, veces in sorted(conteos.items(), key=lambda x: -x[1]):
-        barra = '█' * (veces // 20)
-        porcentaje = round(veces / shots * 100)
-        marcado = " ← ENCONTRADO" if estado == estado_objetivo else ""
-        print(f"|{estado}⟩  {barra} {veces} veces ({porcentaje}%){marcado}")
+    # Display results
+    print("=== RESULTS ===\n")
+    for state, times in sorted(counts.items(), key=lambda x: -x[1]):
+        bar = '█' * (times // 20)
+        percentage = round(times / shots * 100)
+        found = " ← FOUND" if state == target_state else ""
+        print(f"|{state}⟩  {bar} {times} times ({percentage}%){found}")
 
     print()
-    print(circuito.draw(output='text'))
-    return conteos
+    return counts
 
-# Buscar los 8 estados posibles
-estados = ['000', '001', '010', '011', '100', '101', '110', '111']
+# Search all 8 possible states
+all_states = ['000', '001', '010', '011', '100', '101', '110', '111']
 
-for estado in estados:
-    grover(estado)
-    print()
+for state in all_states:
+    grover_search(state)
     print("=" * 50)
     print()
